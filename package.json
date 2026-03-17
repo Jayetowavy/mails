@@ -18,7 +18,9 @@
     "build": "bun build src/cli/index.ts --outfile dist/cli.js --target bun && bun build src/index.ts --outfile dist/index.js --target bun",
     "build:compile": "bun build src/cli/index.ts --compile --outfile mails",
     "dev": "bun run src/cli/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
   },
   "files": [
     "dist",

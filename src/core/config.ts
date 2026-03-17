@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { MailsConfig } from './types.js'
@@ -15,9 +15,7 @@ const DEFAULT_CONFIG: MailsConfig = {
 }
 
 function ensureDir() {
-  if (!existsSync(CONFIG_DIR)) {
-    mkdirSync(CONFIG_DIR, { recursive: true })
-  }
+  mkdirSync(CONFIG_DIR, { recursive: true })
 }
 
 export function loadConfig(): MailsConfig {
