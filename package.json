@@ -19,8 +19,10 @@
     "build:compile": "bun build src/cli/index.ts --compile --outfile mails",
     "dev": "bun run src/cli/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "test:coverage": "bun test --coverage"
+    "test": "bun test test/unit test/e2e/flow.test.ts",
+    "test:coverage": "bun test --coverage test/unit test/e2e/flow.test.ts",
+    "test:live": "bun test test/e2e/live.test.ts",
+    "test:all": "bun test"
   },
   "files": [
     "dist",
