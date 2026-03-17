@@ -3,9 +3,9 @@
 AIエージェント向けのメールインフラ。プログラムでメールの送受信ができます。
 
 [![npm](https://img.shields.io/npm/v/mails)](https://www.npmjs.com/package/mails)
-[![license](https://img.shields.io/npm/l/mails)](LICENSE)
+[![license](https://img.shields.io/npm/l/mails)](https://github.com/chekusu/mails/blob/main/LICENSE)
 
-[English](README.md) | [中文](README.zh.md)
+[English](https://github.com/chekusu/mails/blob/main/README.md) | [中文](https://github.com/chekusu/mails/blob/main/README.zh.md)
 
 ## テストカバレッジ
 

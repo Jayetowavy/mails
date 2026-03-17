@@ -1,6 +1,6 @@
 {
   "name": "mails",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Email infrastructure for AI agents",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,10 @@
   },
   "files": [
     "dist",
-    "skill.md"
+    "skill.md",
+    "README.md",
+    "README.ja.md",
+    "README.zh.md"
   ],
   "keywords": [
     "email",
@@ -37,6 +40,14 @@
     "cloudflare",
     "cli"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chekusu/mails.git"
+  },
+  "homepage": "https://mails.dev",
+  "bugs": {
+    "url": "https://github.com/chekusu/mails/issues"
+  },
   "author": "turing <o.u.turing@gmail.com>",
   "license": "MIT",
   "dependencies": {},

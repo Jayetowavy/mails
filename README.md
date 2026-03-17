@@ -3,9 +3,9 @@
 Email infrastructure for AI agents. Send and receive emails programmatically.
 
 [![npm](https://img.shields.io/npm/v/mails)](https://www.npmjs.com/package/mails)
-[![license](https://img.shields.io/npm/l/mails)](LICENSE)
+[![license](https://img.shields.io/npm/l/mails)](https://github.com/chekusu/mails/blob/main/LICENSE)
 
-[日本語](README.ja.md) | [中文](README.zh.md)
+[日本語](https://github.com/chekusu/mails/blob/main/README.ja.md) | [中文](https://github.com/chekusu/mails/blob/main/README.zh.md)
 
 ## Test Coverage
 

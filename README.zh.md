@@ -3,9 +3,9 @@
 面向 AI Agent 的邮件基础设施。通过编程方式收发邮件。
 
 [![npm](https://img.shields.io/npm/v/mails)](https://www.npmjs.com/package/mails)
-[![license](https://img.shields.io/npm/l/mails)](LICENSE)
+[![license](https://img.shields.io/npm/l/mails)](https://github.com/chekusu/mails/blob/main/LICENSE)
 
-[English](README.md) | [日本語](README.ja.md)
+[English](https://github.com/chekusu/mails/blob/main/README.md) | [日本語](https://github.com/chekusu/mails/blob/main/README.ja.md)
 
 ## 测试覆盖率
 
