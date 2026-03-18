@@ -172,7 +172,7 @@ describe('CLI: inbox command', () => {
       getEmail: getEmailSpy,
     }))
     mock.module('../../src/core/config.js', () => ({
-      loadConfig: () => ({ mailbox: 'agent@test.com' }),
+      loadConfig: () => ({ mailbox: 'agent@test.com', send_provider: 'resend', storage_provider: 'sqlite' }),
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -203,7 +203,7 @@ describe('CLI: inbox command', () => {
       getEmail: mock(async () => null),
     }))
     mock.module('../../src/core/config.js', () => ({
-      loadConfig: () => ({ mailbox: 'agent@test.com' }),
+      loadConfig: () => ({ mailbox: 'agent@test.com', send_provider: 'resend', storage_provider: 'sqlite' }),
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }

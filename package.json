@@ -19,7 +19,7 @@
     "build:compile": "bun build src/cli/index.ts --compile --outfile mails",
     "dev": "bun run src/cli/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test test/unit test/e2e/flow.test.ts",
+    "test": "bun test test/unit test/e2e/flow.test.ts test/e2e/sqlite-search.test.ts",
     "test:coverage": "bun test --coverage test/unit test/e2e/flow.test.ts",
     "test:live": "bun test test/e2e/live.test.ts",
     "test:all": "bun test"
