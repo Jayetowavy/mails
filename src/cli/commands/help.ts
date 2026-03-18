@@ -6,7 +6,6 @@ Usage:
   mails <command> [options]
 
 Commands:
-  login         Sign in to mails.dev
   claim         Claim a @mails.dev mailbox for your agent
   send          Send an email
   inbox         List received emails
@@ -15,10 +14,11 @@ Commands:
   help          Show this help message
   version       Show version
 
-Account:
-  mails login                           Sign in via mails.dev
-  mails login --token <token>           Save token directly
+Claim:
   mails claim <name>                    Claim name@mails.dev (max 10 per user)
+                                        Opens browser for human approval.
+                                        In headless mode, shows a device code
+                                        for the human to enter at mails.dev/claim.
 
 Send:
   mails send --to <email> --subject <subject> --body <text>
@@ -39,6 +39,10 @@ Config:
   mails config set <key> <value>  Set a config value
   mails config get <key>          Get a config value
   mails config path               Show config file path
+
+Environment:
+  MAILS_API_URL       Override API base URL (default: https://api.mails.dev)
+  MAILS_CLAIM_URL     Override claim page URL (default: https://mails.dev/claim)
 
 https://mails.dev
 `.trim())
