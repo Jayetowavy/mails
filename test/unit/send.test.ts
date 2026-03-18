@@ -1,28 +1,31 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test'
 import { send } from '../../src/core/send'
-import { setConfigValue, saveConfig, loadConfig } from '../../src/core/config'
+import { saveConfig } from '../../src/core/config'
+import type { MailsConfig } from '../../src/core/types'
+
+const BASE_CONFIG: MailsConfig = {
+  mode: 'hosted',
+  domain: 'mails.dev',
+  mailbox: '',
+  send_provider: 'resend',
+  storage_provider: 'sqlite',
+  resend_api_key: 're_test',
+  default_from: 'Bot <bot@test.com>',
+}
 
 describe('send', () => {
   const originalFetch = globalThis.fetch
 
   beforeEach(() => {
-    saveConfig({
-      mode: 'hosted',
-      domain: 'mails.dev',
-      mailbox: '',
-      send_provider: 'resend',
-      storage_provider: 'sqlite',
-    })
+    saveConfig({ ...BASE_CONFIG })
   })
 
   afterEach(() => {
     globalThis.fetch = originalFetch
+    saveConfig({ ...BASE_CONFIG })
   })
 
   test('sends email using config', async () => {
-    setConfigValue('resend_api_key', 're_test')
-    setConfigValue('default_from', 'Bot <bot@test.com>')
-
     globalThis.fetch = mock(async () => {
       return new Response(JSON.stringify({ id: 'msg_1' }))
     }) as typeof fetch
@@ -38,9 +41,6 @@ describe('send', () => {
   })
 
   test('uses explicit from over default_from', async () => {
-    setConfigValue('resend_api_key', 're_test')
-    setConfigValue('default_from', 'Default <default@test.com>')
-
     let sentFrom = ''
     globalThis.fetch = mock(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(init.body as string)
@@ -59,9 +59,7 @@ describe('send', () => {
   })
 
   test('throws when no resend_api_key', async () => {
-    const config = loadConfig()
-    delete (config as Record<string, unknown>).resend_api_key
-    saveConfig(config)
+    saveConfig({ ...BASE_CONFIG, resend_api_key: undefined })
 
     expect(
       send({ to: 'a@b.com', subject: 'Test', text: 'hi' })
@@ -69,10 +67,7 @@ describe('send', () => {
   })
 
   test('throws when no from address', async () => {
-    setConfigValue('resend_api_key', 're_test')
-    const config = loadConfig()
-    delete (config as Record<string, unknown>).default_from
-    saveConfig(config)
+    saveConfig({ ...BASE_CONFIG, default_from: undefined })
 
     expect(
       send({ to: 'a@b.com', subject: 'Test', text: 'hi' })
@@ -80,18 +75,12 @@ describe('send', () => {
   })
 
   test('throws when no body', async () => {
-    setConfigValue('resend_api_key', 're_test')
-    setConfigValue('default_from', 'Bot <bot@test.com>')
-
     expect(
       send({ to: 'a@b.com', subject: 'Test' })
     ).rejects.toThrow('Either text or html body is required')
   })
 
   test('accepts string or array for to', async () => {
-    setConfigValue('resend_api_key', 're_test')
-    setConfigValue('default_from', 'Bot <bot@test.com>')
-
     let sentTo: string[] = []
     globalThis.fetch = mock(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(init.body as string)
@@ -107,12 +96,10 @@ describe('send', () => {
   })
 
   test('throws for unknown provider', async () => {
-    setConfigValue('send_provider', 'unknown')
+    saveConfig({ ...BASE_CONFIG, send_provider: 'unknown' })
+
     expect(
       send({ to: 'a@b.com', subject: 'Test', text: 'hi' })
     ).rejects.toThrow('Unknown send provider: unknown')
-
-    // Reset
-    setConfigValue('send_provider', 'resend')
   })
 })
