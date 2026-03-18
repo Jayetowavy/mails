@@ -34,12 +34,18 @@ npx mails
 ### Hosted (mails.dev)
 
 ```bash
-mails claim myagent                  # Claim myagent@mails.dev
+mails claim myagent                  # Claim myagent@mails.dev (free)
+mails inbox                          # List received emails
+mails inbox --query "password"       # Search emails
+mails code --to myagent@mails.dev    # Wait for verification code
+```
+
+To send emails, configure a Resend API key (cloud-managed sending coming soon):
+
+```bash
 mails config set resend_api_key re_YOUR_KEY
 mails config set default_from "Agent <agent@yourdomain.com>"
 mails send --to user@example.com --subject "Hello" --body "World"
-mails inbox                          # List received emails
-mails inbox --query "password"       # Search emails
 ```
 
 ### Self-Hosted

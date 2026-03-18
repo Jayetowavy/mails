@@ -52,16 +52,16 @@ mails inbox
 
 Expected: `No emails found.` (empty inbox is normal for a new mailbox).
 
-### Step 4: Configure sending
+### Step 4: Configure sending (optional)
 
-To send emails, you need a Resend API key. Get one at https://resend.com, then:
+Receiving emails works immediately after claim. To also send emails, you need a Resend API key. Get one at https://resend.com, then:
 
 ```bash
 mails config set resend_api_key re_YOUR_KEY
-mails config set default_from "YourAgent <yourname@mails.dev>"
+mails config set default_from "YourAgent <yourname@yourdomain.com>"
 ```
 
-Note: sending from `@mails.dev` requires the domain to be verified on Resend. If you use a different sending domain (e.g. your own), set `default_from` accordingly.
+Note: use your own verified domain for `default_from`. Cloud-managed sending (no Resend key needed) is coming soon.
 
 ### Step 5: Test sending
 
