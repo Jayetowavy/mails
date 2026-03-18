@@ -1,6 +1,8 @@
 import { setConfigValue } from '../../core/config.js'
 
-const CLAIM_URL = 'https://mails.dev/claim'
+const API_BASE = 'https://mails-dev-worker.o-u-turing.workers.dev'
+const CLAIM_PAGE = 'https://mails.dev/claim'
+const POLL_INTERVAL = 2000
 
 export async function claimCommand(args: string[]) {
   const name = args[0]
@@ -11,76 +13,85 @@ export async function claimCommand(args: string[]) {
     process.exit(1)
   }
 
-  // Start local callback server
-  const { resolve, promise } = Promise.withResolvers<{ mailbox: string; api_key: string }>()
-  let timeout: ReturnType<typeof setTimeout>
-
-  const server = Bun.serve({
-    port: 0, // random port
-    fetch(req) {
-      const url = new URL(req.url)
-
-      if (req.method === 'OPTIONS') {
-        return new Response(null, {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-          },
-        })
-      }
-
-      if (url.pathname === '/callback' && req.method === 'POST') {
-        return req.json().then((data: any) => {
-          resolve(data)
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-          })
-        })
-      }
-
-      return new Response('Not found', { status: 404 })
-    },
+  // 1. Create claim session
+  const startRes = await fetch(`${API_BASE}/v1/claim/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
   })
 
-  const port = server.port
-  const claimUrl = `${CLAIM_URL}?name=${encodeURIComponent(name)}&port=${port}`
+  const startData = await startRes.json() as {
+    session_id?: string
+    device_code?: string
+    url?: string
+    error?: string
+  }
 
-  console.log(`Opening browser to claim ${name}@mails.dev ...`)
-  console.log('')
-  console.log(`If the browser doesn't open, visit:`)
-  console.log(`  ${claimUrl}`)
-  console.log('')
-  console.log('Waiting for confirmation...')
-
-  // Open browser
-  const { exec } = await import('child_process')
-  const platform = process.platform
-  const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open'
-  exec(`${cmd} "${claimUrl}"`)
-
-  // Timeout after 5 minutes
-  timeout = setTimeout(() => {
-    console.error('\nTimeout: no response received. Try again.')
-    server.stop()
+  if (!startRes.ok) {
+    console.error(`Error: ${startData.error}`)
     process.exit(1)
-  }, 5 * 60 * 1000)
+  }
 
-  // Wait for callback
-  const result = await promise
-  clearTimeout(timeout)
-  server.stop()
+  const { session_id, device_code, url } = startData
 
-  // Save to config
-  setConfigValue('mailbox', result.mailbox)
-  setConfigValue('api_key', result.api_key)
-
+  // 2. Show info and open browser
   console.log('')
-  console.log(`Claimed: ${result.mailbox}`)
-  console.log(`API Key: ${result.api_key}`)
+  console.log(`  Claim: ${name}@mails.dev`)
+  console.log(`  Code:  ${device_code}`)
   console.log('')
-  console.log('Saved to ~/.mails/config.json')
+  console.log(`  ${url}`)
+  console.log('')
+  console.log(`  Or visit ${CLAIM_PAGE} and enter the code above.`)
+  console.log('')
+
+  // Try to open browser
+  try {
+    const { exec } = await import('child_process')
+    const platform = process.platform
+    const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open'
+    exec(`${cmd} "${url}"`)
+  } catch {}
+
+  // 3. Poll for result
+  process.stdout.write('  Waiting...')
+
+  const deadline = Date.now() + 10 * 60 * 1000 // 10 min timeout
+
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, POLL_INTERVAL))
+
+    const pollRes = await fetch(`${API_BASE}/v1/claim/poll?session=${session_id}`)
+    const pollData = await pollRes.json() as {
+      status: string
+      mailbox?: string
+      api_key?: string
+    }
+
+    if (pollData.status === 'complete') {
+      process.stdout.write('\n')
+      console.log('')
+
+      setConfigValue('mailbox', pollData.mailbox!)
+      setConfigValue('api_key', pollData.api_key!)
+
+      console.log(`  Claimed: ${pollData.mailbox}`)
+      console.log(`  API Key: ${pollData.api_key}`)
+      console.log('')
+      console.log('  Saved to ~/.mails/config.json')
+      return
+    }
+
+    if (pollData.status === 'expired') {
+      process.stdout.write('\n')
+      console.error('  Session expired. Try again.')
+      process.exit(1)
+    }
+
+    // Still pending
+    process.stdout.write('.')
+  }
+
+  process.stdout.write('\n')
+  console.error('  Timeout. Try again.')
+  process.exit(1)
 }
