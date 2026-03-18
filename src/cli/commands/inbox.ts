@@ -1,4 +1,4 @@
-import { getInbox, getEmail } from '../../core/receive.js'
+import { getInbox, searchInbox, getEmail } from '../../core/receive.js'
 import { loadConfig } from '../../core/config.js'
 
 function parseArgs(args: string[]): Record<string, string> {
@@ -55,11 +55,18 @@ export async function inboxCommand(args: string[]) {
     process.exit(1)
   }
 
-  const limit = opts.limit ? parseInt(opts.limit) : 20
-  const emails = await getInbox(mailbox, { limit })
+  const limit = opts.limit ? (parseInt(opts.limit, 10) || 20) : 20
+  const direction = opts.direction === 'inbound' || opts.direction === 'outbound'
+    ? opts.direction
+    : undefined
+  const query = opts.query?.trim()
+
+  const emails = query
+    ? await searchInbox(mailbox, { query, direction, limit })
+    : await getInbox(mailbox, { limit, direction })
 
   if (emails.length === 0) {
-    console.log('No emails found.')
+    console.log(query ? `No emails found for query: ${query}` : 'No emails found.')
     return
   }
 

@@ -1,5 +1,6 @@
-import type { Email, StorageProvider } from '../../core/types.js'
+import type { Email, EmailQueryOptions, EmailSearchOptions, StorageProvider } from '../../core/types.js'
 
+// Issue #1 fix: remove invalid GIN index, use generated column instead
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS emails (
   id TEXT PRIMARY KEY,
@@ -22,14 +23,39 @@ CREATE INDEX IF NOT EXISTS idx_emails_mailbox ON emails(mailbox, received_at DES
 CREATE INDEX IF NOT EXISTS idx_emails_code ON emails(mailbox) WHERE code IS NOT NULL;
 `
 
+// Issue #4 fix: single source of truth for search vector expression
+const SEARCH_VECTOR = `(
+  setweight(to_tsvector('simple', coalesce(subject, '')), 'A') ||
+  setweight(to_tsvector('simple', coalesce(from_name, '')), 'B') ||
+  setweight(to_tsvector('simple', coalesce(body_text, '')), 'C')
+)`
+
+// Issue #3 fix: explicit column list instead of SELECT *
+const EMAIL_COLUMNS = 'id, mailbox, from_address, from_name, to_address, subject, body_text, body_html, code, headers, metadata, direction, status, received_at, created_at'
+
+interface Db9SqlColumn {
+  name: string
+  type?: string
+}
+
 interface Db9SqlResult {
-  columns: string[]
+  columns: Array<string | Db9SqlColumn>
   rows: unknown[][]
   row_count: number
 }
 
+function getColumnNames(columns: Array<string | Db9SqlColumn>): string[] {
+  return columns.map(col => typeof col === 'string' ? col : col.name)
+}
+
 export function createDb9Provider(token: string, databaseId: string): StorageProvider {
   const baseUrl = 'https://api.db9.ai'
+
+  // Issue #2 fix: escape single quotes AND backslashes
+  const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "''")
+
+  // Issue #6 fix: escape ILIKE wildcards
+  const escLike = (s: string) => esc(s).replace(/%/g, '\\%').replace(/_/g, '\\_')
 
   async function sql(query: string): Promise<Db9SqlResult> {
     const res = await fetch(`${baseUrl}/customer/databases/${databaseId}/sql`, {
@@ -48,9 +74,10 @@ export function createDb9Provider(token: string, databaseId: string): StoragePro
   }
 
   function rowsToEmails(result: Db9SqlResult): Email[] {
+    const columns = getColumnNames(result.columns)
     return result.rows.map(row => {
       const obj: Record<string, unknown> = {}
-      result.columns.forEach((col, i) => { obj[col] = row[i] })
+      columns.forEach((col, i) => { obj[col] = row[i] })
       return {
         id: obj.id as string,
         mailbox: obj.mailbox as string,
@@ -79,7 +106,6 @@ export function createDb9Provider(token: string, databaseId: string): StoragePro
     },
 
     async saveEmail(email: Email) {
-      const esc = (s: string) => s.replace(/'/g, "''")
       await sql(`
         INSERT INTO emails (id, mailbox, from_address, from_name, to_address, subject, body_text, body_html, code, headers, metadata, direction, status, received_at, created_at)
         VALUES (
@@ -98,10 +124,8 @@ export function createDb9Provider(token: string, databaseId: string): StoragePro
     },
 
     async getEmails(mailbox, options) {
-      const limit = options?.limit ?? 20
-      const offset = options?.offset ?? 0
-      const esc = (s: string) => s.replace(/'/g, "''")
-      let query = `SELECT * FROM emails WHERE mailbox = '${esc(mailbox)}'`
+      const { limit, offset } = normalizeQueryOptions(options)
+      let query = `SELECT ${EMAIL_COLUMNS} FROM emails WHERE mailbox = '${esc(mailbox)}'`
 
       if (options?.direction) {
         query += ` AND direction = '${esc(options.direction)}'`
@@ -113,9 +137,36 @@ export function createDb9Provider(token: string, databaseId: string): StoragePro
       return rowsToEmails(result)
     },
 
+    async searchEmails(mailbox, options) {
+      const { limit, offset } = normalizeQueryOptions(options)
+      const directionClause = options.direction
+        ? `AND direction = '${esc(options.direction)}'`
+        : ''
+      const queryText = esc(options.query)
+      const pattern = `%${escLike(options.query)}%`
+
+      const result = await sql(`
+        SELECT ${EMAIL_COLUMNS}
+        FROM emails
+        WHERE mailbox = '${esc(mailbox)}'
+          ${directionClause}
+          AND (
+            ${SEARCH_VECTOR} @@ websearch_to_tsquery('simple', '${queryText}')
+            OR from_address ILIKE '${pattern}' ESCAPE '\\\\'
+            OR to_address ILIKE '${pattern}' ESCAPE '\\\\'
+            OR code ILIKE '${pattern}' ESCAPE '\\\\'
+          )
+        ORDER BY
+          ts_rank(${SEARCH_VECTOR}, websearch_to_tsquery('simple', '${queryText}')) DESC,
+          received_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `)
+
+      return rowsToEmails(result)
+    },
+
     async getEmail(id) {
-      const esc = (s: string) => s.replace(/'/g, "''")
-      const result = await sql(`SELECT * FROM emails WHERE id = '${esc(id)}' LIMIT 1`)
+      const result = await sql(`SELECT ${EMAIL_COLUMNS} FROM emails WHERE id = '${esc(id)}' LIMIT 1`)
       const emails = rowsToEmails(result)
       return emails[0] ?? null
     },
@@ -123,7 +174,6 @@ export function createDb9Provider(token: string, databaseId: string): StoragePro
     async getCode(mailbox, options) {
       const timeout = (options?.timeout ?? 30) * 1000
       const since = options?.since
-      const esc = (s: string) => s.replace(/'/g, "''")
       const deadline = Date.now() + timeout
 
       while (Date.now() < deadline) {
@@ -137,10 +187,11 @@ export function createDb9Provider(token: string, databaseId: string): StoragePro
 
         const result = await sql(query)
         if (result.row_count > 0) {
+          const columns = getColumnNames(result.columns)
           const row = result.rows[0]!
-          const codeIdx = result.columns.indexOf('code')
-          const fromIdx = result.columns.indexOf('from_address')
-          const subIdx = result.columns.indexOf('subject')
+          const codeIdx = columns.indexOf('code')
+          const fromIdx = columns.indexOf('from_address')
+          const subIdx = columns.indexOf('subject')
           return {
             code: row[codeIdx] as string,
             from: row[fromIdx] as string,
@@ -153,5 +204,15 @@ export function createDb9Provider(token: string, databaseId: string): StoragePro
 
       return null
     },
+  }
+}
+
+function normalizeQueryOptions(options?: EmailQueryOptions | EmailSearchOptions): { limit: number; offset: number } {
+  const limit = Number.isFinite(options?.limit) ? Math.trunc(options!.limit!) : 20
+  const offset = Number.isFinite(options?.offset) ? Math.trunc(options!.offset!) : 0
+
+  return {
+    limit: limit > 0 ? limit : 20,
+    offset: offset >= 0 ? offset : 0,
   }
 }

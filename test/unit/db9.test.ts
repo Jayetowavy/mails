@@ -100,7 +100,23 @@ describe('db9 provider', () => {
   test('getEmails returns parsed emails', async () => {
     globalThis.fetch = mock(async () => {
       return new Response(JSON.stringify({
-        columns: ['id', 'mailbox', 'from_address', 'from_name', 'to_address', 'subject', 'body_text', 'body_html', 'code', 'headers', 'metadata', 'direction', 'status', 'received_at', 'created_at'],
+        columns: [
+          { name: 'id', type: 'text' },
+          { name: 'mailbox', type: 'text' },
+          { name: 'from_address', type: 'text' },
+          { name: 'from_name', type: 'text' },
+          { name: 'to_address', type: 'text' },
+          { name: 'subject', type: 'text' },
+          { name: 'body_text', type: 'text' },
+          { name: 'body_html', type: 'text' },
+          { name: 'code', type: 'text' },
+          { name: 'headers', type: 'jsonb' },
+          { name: 'metadata', type: 'jsonb' },
+          { name: 'direction', type: 'text' },
+          { name: 'status', type: 'text' },
+          { name: 'received_at', type: 'timestamptz' },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
         rows: [
           ['e-1', 'agent@test.com', 'sender@x.com', 'Sender', 'agent@test.com', 'Hi', 'Hello', '', null, '{}', '{}', 'inbound', 'received', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z'],
         ],
@@ -155,10 +171,72 @@ describe('db9 provider', () => {
     expect(await provider.getEmail('nope')).toBeNull()
   })
 
+  test('searchEmails builds hybrid FTS query', async () => {
+    let executedQuery = ''
+    globalThis.fetch = mock(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string)
+      executedQuery = body.query
+      return new Response(JSON.stringify({ columns: [], rows: [], row_count: 0 }))
+    }) as typeof fetch
+
+    const provider = createDb9Provider('token', 'db-123')
+    await provider.searchEmails('agent@test.com', {
+      query: `"reset password" OR owner's`,
+      direction: 'inbound',
+      limit: 5,
+    })
+
+    expect(executedQuery).toContain("websearch_to_tsquery('simple'")
+    expect(executedQuery).toContain("to_tsvector('simple'")
+    expect(executedQuery).toContain('ts_rank(')
+    expect(executedQuery).toContain('from_address ILIKE')
+    expect(executedQuery).toContain('code ILIKE')
+    expect(executedQuery).toContain("direction = 'inbound'")
+    expect(executedQuery).toContain("owner''s")
+  })
+
+  test('searchEmails returns parsed emails', async () => {
+    globalThis.fetch = mock(async () => {
+      return new Response(JSON.stringify({
+        columns: [
+          { name: 'id', type: 'text' },
+          { name: 'mailbox', type: 'text' },
+          { name: 'from_address', type: 'text' },
+          { name: 'from_name', type: 'text' },
+          { name: 'to_address', type: 'text' },
+          { name: 'subject', type: 'text' },
+          { name: 'body_text', type: 'text' },
+          { name: 'body_html', type: 'text' },
+          { name: 'code', type: 'text' },
+          { name: 'headers', type: 'jsonb' },
+          { name: 'metadata', type: 'jsonb' },
+          { name: 'direction', type: 'text' },
+          { name: 'status', type: 'text' },
+          { name: 'received_at', type: 'timestamptz' },
+          { name: 'created_at', type: 'timestamptz' },
+        ],
+        rows: [
+          ['search-1', 'agent@test.com', 'sender@x.com', 'Sender', 'agent@test.com', 'Reset password', 'Hello', '', '123456', '{}', '{}', 'inbound', 'received', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z'],
+        ],
+        row_count: 1,
+      }))
+    }) as typeof fetch
+
+    const provider = createDb9Provider('token', 'db-123')
+    const emails = await provider.searchEmails('agent@test.com', { query: 'reset' })
+    expect(emails).toHaveLength(1)
+    expect(emails[0]!.id).toBe('search-1')
+    expect(emails[0]!.code).toBe('123456')
+  })
+
   test('getCode returns code on first poll', async () => {
     globalThis.fetch = mock(async () => {
       return new Response(JSON.stringify({
-        columns: ['code', 'from_address', 'subject'],
+        columns: [
+          { name: 'code', type: 'text' },
+          { name: 'from_address', type: 'text' },
+          { name: 'subject', type: 'text' },
+        ],
         rows: [['999888', 'noreply@svc.com', 'Your code']],
         row_count: 1,
       }))
