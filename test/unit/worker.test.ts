@@ -1,67 +1,82 @@
 import { describe, expect, test } from 'bun:test'
+import { parseIncomingEmail } from '../../worker/src/mime'
 
-// Test the worker helper functions by extracting them
-// Since worker/src/index.ts exports a default handler, we test the HTTP handlers via fetch simulation
+describe('worker: MIME parsing', () => {
+  test('extracts body and text attachment metadata from multipart email', async () => {
+    const attachment = Buffer.from('invoice number 42').toString('base64')
+    const raw = [
+      'From: "Sender" <sender@test.com>',
+      'Subject: Invoice',
+      'Message-ID: <msg-42@test.com>',
+      'Content-Type: multipart/mixed; boundary="boundary"',
+      '',
+      '--boundary',
+      'Content-Type: text/plain; charset="utf-8"',
+      '',
+      'Email body',
+      '--boundary',
+      'Content-Type: text/plain; name="invoice.txt"',
+      'Content-Disposition: attachment; filename="invoice.txt"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      attachment,
+      '--boundary--',
+      '',
+    ].join('\r\n')
 
-// We can't directly import the worker module (it uses ExportedHandler types),
-// so we test the extractBody and parseFromName logic by duplicating the pure functions
-// The actual worker integration is tested via wrangler in e2e
-
-describe('worker: MIME body extraction', () => {
-  // Duplicated from worker for unit testing (pure functions)
-  function extractBody(raw: string): string {
-    const plainMatch = raw.match(
-      /Content-Type:\s*text\/plain[^\r\n]*\r?\n(?:Content-Transfer-Encoding:[^\r\n]*\r?\n)?(?:\r?\n)([\s\S]*?)(?:\r?\n--|\r?\n\r?\n\S*$)/i
+    const parsed = await parseIncomingEmail(
+      new TextEncoder().encode(raw).buffer,
+      'email-1',
+      '2026-03-18T00:00:00.000Z'
     )
-    if (plainMatch) return plainMatch[1]!.trim()
-    const headerEnd = raw.indexOf('\r\n\r\n')
-    if (headerEnd > 0) return raw.slice(headerEnd + 4).trim()
-    return raw
-  }
 
-  function extractHtmlBody(raw: string): string {
-    const htmlMatch = raw.match(
-      /Content-Type:\s*text\/html[^\r\n]*\r?\n(?:Content-Transfer-Encoding:[^\r\n]*\r?\n)?(?:\r?\n)([\s\S]*?)(?:\r?\n--)/i
+    expect(parsed.subject).toBe('Invoice')
+    expect(parsed.bodyText.trim()).toBe('Email body')
+    expect(parsed.messageId).toContain('msg-42')
+    expect(parsed.attachmentCount).toBe(1)
+    expect(parsed.attachmentNames).toBe('invoice.txt')
+    expect(parsed.attachmentSearchText).toContain('invoice number 42')
+    expect(parsed.attachments[0]).toMatchObject({
+      email_id: 'email-1',
+      filename: 'invoice.txt',
+      content_type: 'text/plain',
+      content_disposition: 'attachment',
+      text_extraction_status: 'done',
+      text_content: 'invoice number 42',
+      downloadable: false,
+    })
+  })
+
+  test('marks unsupported binary attachments without failing the email parse', async () => {
+    const pdf = Buffer.from('%PDF-1.4 fake').toString('base64')
+    const raw = [
+      'Subject: PDF',
+      'Content-Type: multipart/mixed; boundary="boundary"',
+      '',
+      '--boundary',
+      'Content-Type: text/plain',
+      '',
+      'Body',
+      '--boundary',
+      'Content-Type: application/pdf; name="invoice.pdf"',
+      'Content-Disposition: attachment; filename="invoice.pdf"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      pdf,
+      '--boundary--',
+      '',
+    ].join('\r\n')
+
+    const parsed = await parseIncomingEmail(
+      new TextEncoder().encode(raw).buffer,
+      'email-2',
+      '2026-03-18T00:00:00.000Z'
     )
-    if (htmlMatch) return htmlMatch[1]!.trim()
-    return ''
-  }
 
-  function parseFromName(from: string): string {
-    const match = from.match(/^"?([^"<]+)"?\s*</)
-    return match ? match[1]!.trim() : ''
-  }
-
-  test('extracts plain text from multipart MIME', () => {
-    const raw = `From: sender@test.com\r\nContent-Type: multipart/alternative; boundary="boundary"\r\n\r\n--boundary\r\nContent-Type: text/plain\r\n\r\nHello World\r\n--boundary\r\nContent-Type: text/html\r\n\r\n<p>Hello World</p>\r\n--boundary--`
-    expect(extractBody(raw)).toBe('Hello World')
-  })
-
-  test('extracts HTML body from multipart MIME', () => {
-    const raw = `Content-Type: multipart/alternative; boundary="b"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nPlain\r\n--b\r\nContent-Type: text/html\r\n\r\n<h1>HTML</h1>\r\n--b--`
-    expect(extractHtmlBody(raw)).toBe('<h1>HTML</h1>')
-  })
-
-  test('falls back to body after headers', () => {
-    const raw = `From: sender@test.com\r\nSubject: Test\r\n\r\nSimple body text`
-    expect(extractBody(raw)).toBe('Simple body text')
-  })
-
-  test('returns raw string when no headers found', () => {
-    expect(extractBody('No headers at all')).toBe('No headers at all')
-  })
-
-  test('returns empty string when no HTML part', () => {
-    const raw = `Content-Type: text/plain\r\n\r\nPlain only`
-    expect(extractHtmlBody(raw)).toBe('')
-  })
-
-  test('parseFromName extracts display name', () => {
-    expect(parseFromName('John Doe <john@test.com>')).toBe('John Doe')
-    expect(parseFromName('"Jane Smith" <jane@test.com>')).toBe('Jane Smith')
-  })
-
-  test('parseFromName returns empty for bare address', () => {
-    expect(parseFromName('user@test.com')).toBe('')
+    expect(parsed.bodyText.trim()).toBe('Body')
+    expect(parsed.attachments).toHaveLength(1)
+    expect(parsed.attachments[0]!.filename).toBe('invoice.pdf')
+    expect(parsed.attachments[0]!.text_extraction_status).toBe('unsupported')
+    expect(parsed.attachments[0]!.text_content).toBe('')
   })
 })

@@ -35,6 +35,13 @@ export async function inboxCommand(args: string[]) {
     console.log(`Date: ${email.received_at}`)
     if (email.code) console.log(`Code: ${email.code}`)
     console.log(`Status: ${email.status}`)
+    if (email.attachments?.length) {
+      console.log('Attachments:')
+      for (const attachment of email.attachments) {
+        const size = attachment.size_bytes ?? 0
+        console.log(`- ${attachment.filename} (${attachment.content_type}, ${size} bytes)`)
+      }
+    }
     console.log('---')
     console.log(email.body_text || '(no text body)')
     return
