@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
-import type { Email, EmailQueryOptions, EmailSearchOptions, StorageProvider } from '../../core/types.js'
+import type { Attachment, Email, EmailQueryOptions, EmailSearchOptions, StorageProvider } from '../../core/types.js'
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS emails (
@@ -17,13 +17,33 @@ CREATE TABLE IF NOT EXISTS emails (
   code TEXT,
   headers TEXT DEFAULT '{}',
   metadata TEXT DEFAULT '{}',
+  message_id TEXT,
+  has_attachments INTEGER NOT NULL DEFAULT 0,
+  attachment_count INTEGER NOT NULL DEFAULT 0,
+  attachment_names TEXT DEFAULT '',
+  attachment_search_text TEXT DEFAULT '',
   direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
   status TEXT DEFAULT 'received' CHECK (status IN ('received', 'sent', 'failed', 'queued')),
   received_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS attachments (
+  id TEXT PRIMARY KEY,
+  email_id TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes INTEGER,
+  content_disposition TEXT,
+  content_id TEXT,
+  mime_part_index INTEGER NOT NULL,
+  text_content TEXT DEFAULT '',
+  text_extraction_status TEXT NOT NULL DEFAULT 'pending',
+  storage_key TEXT,
+  created_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_emails_mailbox ON emails(mailbox, received_at DESC);
 CREATE INDEX IF NOT EXISTS idx_emails_code ON emails(mailbox) WHERE code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_attachments_email_id ON attachments(email_id);
 `
 
 export function createSqliteProvider(dbPath?: string): StorageProvider {
@@ -44,14 +64,35 @@ export function createSqliteProvider(dbPath?: string): StorageProvider {
 
     async saveEmail(email: Email) {
       db.prepare(`
-        INSERT OR REPLACE INTO emails (id, mailbox, from_address, from_name, to_address, subject, body_text, body_html, code, headers, metadata, direction, status, received_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO emails (id, mailbox, from_address, from_name, to_address, subject, body_text, body_html, code, headers, metadata, message_id, has_attachments, attachment_count, attachment_names, attachment_search_text, direction, status, received_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         email.id, email.mailbox, email.from_address, email.from_name,
         email.to_address, email.subject, email.body_text, email.body_html,
         email.code, JSON.stringify(email.headers), JSON.stringify(email.metadata),
+        email.message_id ?? null,
+        email.has_attachments ? 1 : 0,
+        email.attachment_count ?? 0,
+        email.attachment_names ?? '',
+        email.attachment_search_text ?? '',
         email.direction, email.status, email.received_at, email.created_at,
       )
+
+      if (email.attachments?.length) {
+        const stmt = db.prepare(`
+          INSERT OR REPLACE INTO attachments (id, email_id, filename, content_type, size_bytes, content_disposition, content_id, mime_part_index, text_content, text_extraction_status, storage_key, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        for (const att of email.attachments) {
+          stmt.run(
+            att.id, att.email_id, att.filename, att.content_type,
+            att.size_bytes ?? null, att.content_disposition ?? null,
+            att.content_id ?? null, att.mime_part_index,
+            att.text_content ?? '', att.text_extraction_status ?? 'pending',
+            att.storage_key ?? null, att.created_at,
+          )
+        }
+      }
     },
 
     async getEmails(mailbox, options) {
@@ -67,7 +108,7 @@ export function createSqliteProvider(dbPath?: string): StorageProvider {
       query += ' ORDER BY received_at DESC LIMIT ? OFFSET ?'
       params.push(limit, offset)
 
-      const rows = db.prepare(query).all(...params) as Record<string, string>[]
+      const rows = db.prepare(query).all(...params) as Record<string, unknown>[]
       return rows.map(rowToEmail)
     },
 
@@ -100,13 +141,17 @@ export function createSqliteProvider(dbPath?: string): StorageProvider {
 
       params.push(pattern, pattern, pattern, pattern, pattern, pattern, limit, offset)
 
-      const rows = db.prepare(query).all(...params) as Record<string, string>[]
+      const rows = db.prepare(query).all(...params) as Record<string, unknown>[]
       return rows.map(rowToEmail)
     },
 
     async getEmail(id) {
-      const row = db.prepare('SELECT * FROM emails WHERE id = ?').get(id) as Record<string, string> | null
-      return row ? rowToEmail(row) : null
+      const row = db.prepare('SELECT * FROM emails WHERE id = ?').get(id) as Record<string, unknown> | null
+      if (!row) return null
+      const email = rowToEmail(row)
+      const attRows = db.prepare('SELECT * FROM attachments WHERE email_id = ? ORDER BY mime_part_index ASC').all(id) as Record<string, unknown>[]
+      email.attachments = attRows.map(rowToAttachment)
+      return email
     },
 
     async getCode(mailbox, options) {
@@ -138,23 +183,45 @@ export function createSqliteProvider(dbPath?: string): StorageProvider {
   }
 }
 
-function rowToEmail(row: Record<string, string>): Email {
+function rowToEmail(row: Record<string, unknown>): Email {
   return {
-    id: row.id!,
-    mailbox: row.mailbox!,
-    from_address: row.from_address!,
-    from_name: row.from_name ?? '',
-    to_address: row.to_address!,
-    subject: row.subject ?? '',
-    body_text: row.body_text ?? '',
-    body_html: row.body_html ?? '',
-    code: row.code ?? null,
-    headers: safeJsonParse(row.headers, {}),
-    metadata: safeJsonParse(row.metadata, {}),
+    id: row.id as string,
+    mailbox: row.mailbox as string,
+    from_address: row.from_address as string,
+    from_name: (row.from_name as string) ?? '',
+    to_address: row.to_address as string,
+    subject: (row.subject as string) ?? '',
+    body_text: (row.body_text as string) ?? '',
+    body_html: (row.body_html as string) ?? '',
+    code: (row.code as string) ?? null,
+    headers: safeJsonParse(row.headers as string, {}),
+    metadata: safeJsonParse(row.metadata as string, {}),
+    message_id: (row.message_id as string) ?? null,
+    has_attachments: !!(row.has_attachments as number),
+    attachment_count: (row.attachment_count as number) ?? 0,
+    attachment_names: (row.attachment_names as string) ?? '',
+    attachment_search_text: (row.attachment_search_text as string) ?? '',
     direction: row.direction as Email['direction'],
     status: row.status as Email['status'],
-    received_at: row.received_at!,
-    created_at: row.created_at!,
+    received_at: row.received_at as string,
+    created_at: row.created_at as string,
+  }
+}
+
+function rowToAttachment(row: Record<string, unknown>): Attachment {
+  return {
+    id: row.id as string,
+    email_id: row.email_id as string,
+    filename: row.filename as string,
+    content_type: row.content_type as string,
+    size_bytes: (row.size_bytes as number) ?? null,
+    content_disposition: (row.content_disposition as string) ?? null,
+    content_id: (row.content_id as string) ?? null,
+    mime_part_index: row.mime_part_index as number,
+    text_content: (row.text_content as string) ?? '',
+    text_extraction_status: (row.text_extraction_status as Attachment['text_extraction_status']) ?? 'pending',
+    storage_key: (row.storage_key as string) ?? null,
+    created_at: row.created_at as string,
   }
 }
 
