@@ -298,7 +298,7 @@ bun test:live         # 实时 E2E 测试（需要 .env 配置）
 bun test:all          # 全部测试（包括实时 E2E）
 ```
 
-168 个单元测试 + 71 个 E2E 测试 = **239 个测试**，覆盖全部 Provider。
+198 个单元测试 + 27 个 E2E 测试 = **225 个测试**，覆盖全部 Provider。
 
 ### 各 Provider E2E 覆盖情况
 

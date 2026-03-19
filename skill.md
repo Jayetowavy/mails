@@ -100,6 +100,7 @@ mails claim <name>        Claim name@mails.dev (max 10 per user)
 mails send                Send an email (with optional attachments)
 mails inbox               List or search received emails
 mails code                Wait for a verification code
+mails sync                Sync emails from Worker to local storage
 mails config              View or modify configuration
 mails help                Show help
 mails version             Show version
@@ -173,6 +174,16 @@ mails config path               # Show config file path
 
 Config file: `~/.mails/config.json`
 
+### sync
+
+```bash
+mails sync                              # Sync from Worker to local storage
+mails sync --since 2026-03-01           # Sync from specific date
+mails sync --from-scratch               # Full re-sync (ignore last sync time)
+```
+
+Pulls emails from your Worker (hosted or self-hosted) into local SQLite. Useful for offline access, local backup, or local search. Tracks last sync time in config — subsequent runs are incremental.
+
 | Key | Set by | Description |
 |-----|--------|-------------|
 | `mailbox` | `mails claim` | Your receiving address |
@@ -194,25 +205,26 @@ wrangler d1 create mails
 # Edit wrangler.toml — set your D1 database ID
 wrangler d1 execute mails --file=schema.sql
 wrangler deploy
+wrangler secret put RESEND_API_KEY       # Enable sending via Worker
+wrangler secret put AUTH_TOKEN           # Secure the API (optional)
 ```
 
 Then configure Cloudflare Email Routing to forward to this worker.
-
-Secure the Worker API (optional but recommended):
-
-```bash
-wrangler secret put AUTH_TOKEN    # set a secret token
-```
 
 Configure the CLI to use your Worker:
 
 ```bash
 mails config set worker_url https://your-worker.example.com
-mails config set worker_token YOUR_AUTH_TOKEN    # same as above
+mails config set worker_token YOUR_AUTH_TOKEN
 mails config set mailbox agent@yourdomain.com
 ```
 
-Now `mails inbox`, `mails code`, and `mails inbox --query` query your Worker directly. No local database needed.
+Now all commands work through your Worker:
+```bash
+mails send --to user@example.com --subject "Hello" --body "Hi"  # Sends via Worker
+mails inbox                              # Queries Worker API
+mails sync                               # Download emails to local SQLite
+```
 
 ## SDK (Programmatic Usage)
 
@@ -342,6 +354,16 @@ curl -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
 # Wait for verification code
 curl -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
   "https://your-worker.example.com/api/code?to=agent@yourdomain.com&timeout=30"
+
+# Send email (via Worker → Resend, records outbound in D1)
+curl -X POST -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  "https://your-worker.example.com/api/send" \
+  -d '{"from":"agent@yourdomain.com","to":["user@example.com"],"subject":"Hello","text":"World"}'
+
+# Sync emails (incremental pull)
+curl -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  "https://your-worker.example.com/api/sync?to=agent@yourdomain.com&since=2026-03-01T00:00:00Z"
 ```
 
 ## Environment Variables

@@ -298,7 +298,7 @@ bun test:live         # Live E2E with real Resend + Cloudflare (requires .env)
 bun test:all          # All tests including live E2E
 ```
 
-168 unit tests + 71 E2E tests = **239 tests** across all providers.
+198 unit tests + 27 E2E tests = **225 tests** across all providers.
 
 ### E2E Coverage by Provider
 
