@@ -85,11 +85,15 @@ mails code --to myagent@mails.dev    # 等待验证码
 ### 自部署模式
 
 ```bash
-cd worker && wrangler deploy         # 部署你自己的 Worker
+cd worker && wrangler deploy             # 部署你自己的 Worker
+wrangler secret put RESEND_API_KEY       # 在 Worker 上设置 Resend 密钥（用于发送）
+wrangler secret put AUTH_TOKEN           # 设置鉴权 token（可选）
 mails config set worker_url https://your-worker.example.com
 mails config set worker_token YOUR_TOKEN
 mails config set mailbox agent@yourdomain.com
-mails inbox                          # 查询你的 Worker API
+mails send --to user@example.com --subject "Hello" --body "Hi"  # 通过 Worker 发送
+mails inbox                              # 查询 Worker API
+mails sync                               # 下载邮件到本地 SQLite
 ```
 
 ## CLI 参考
@@ -152,6 +156,16 @@ mails config                    # 查看所有配置
 mails config set <key> <value>  # 设置配置项
 mails config get <key>          # 获取配置项
 ```
+
+### sync
+
+```bash
+mails sync                              # 从 Worker 同步邮件到本地存储
+mails sync --since 2026-03-01           # 从指定日期同步
+mails sync --from-scratch               # 全量重新同步
+```
+
+从 Worker（托管或自部署）拉取邮件到本地 SQLite。适用于离线访问或本地备份。
 
 ## SDK 用法
 
@@ -227,6 +241,8 @@ wrangler secret put AUTH_TOKEN    # 设置密钥 token
 | `GET /api/inbox?to=<addr>&query=<text>` | 搜索邮件 |
 | `GET /api/code?to=<addr>&timeout=30` | 长轮询等待验证码 |
 | `GET /api/email?id=<id>` | 邮件详情（含附件） |
+| `POST /api/send` | 通过 Resend 发送邮件（需要 RESEND_API_KEY） |
+| `GET /api/sync?to=<addr>&since=<iso>` | 增量邮件同步（含附件） |
 | `GET /health` | 健康检查（始终公开） |
 
 ## 存储 Provider
@@ -303,7 +319,9 @@ bun test:all          # 全部测试（包括实时 E2E）
 | 附件下载                  | ✅     | ✅    | —            | ✅            |
 | 保存到磁盘 (--save)       | ✅     | —     | —            | ✅            |
 | 邮箱隔离                  | ✅     | ✅    | —            | —             |
-| Outbound 记录             | ✅     | —     | N/A          | N/A           |
+| Outbound 记录             | ✅     | —     | ✅           | N/A           |
+| 通过 Worker 发送 (/api/send)| —   | —     | ✅           | —             |
+| 同步到本地                 | —     | —     | ✅           | —             |
 
 ## 许可证
 

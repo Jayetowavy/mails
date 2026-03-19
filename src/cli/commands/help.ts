@@ -10,6 +10,7 @@ Commands:
   send          Send an email
   inbox         List received emails
   code          Wait for a verification code
+  sync          Sync emails from Worker to local storage
   config        View or modify configuration
   help          Show this help message
   version       Show version
@@ -38,6 +39,11 @@ Inbox:
 Code:
   mails code --to <address>             Wait for a verification code
   mails code --to <address> --timeout 60
+
+Sync:
+  mails sync                            Sync emails from Worker to local storage
+  mails sync --since 2026-03-01         Sync from specific date
+  mails sync --from-scratch             Full re-sync (ignore last sync time)
 
 Config:
   mails config                    Show current config

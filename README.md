@@ -85,11 +85,15 @@ No Resend key needed — hosted users get 100 free sends/month. For unlimited se
 ### Self-Hosted
 
 ```bash
-cd worker && wrangler deploy         # Deploy your own Worker
+cd worker && wrangler deploy             # Deploy your own Worker
+wrangler secret put RESEND_API_KEY       # Set Resend key on Worker (for sending)
+wrangler secret put AUTH_TOKEN           # Set auth token (optional)
 mails config set worker_url https://your-worker.example.com
 mails config set worker_token YOUR_TOKEN
 mails config set mailbox agent@yourdomain.com
-mails inbox                          # Queries your Worker API
+mails send --to user@example.com --subject "Hello" --body "Hi"  # Sends via Worker
+mails inbox                              # Queries Worker API
+mails sync                               # Download emails to local SQLite
 ```
 
 ## CLI Reference
@@ -152,6 +156,16 @@ mails config                    # Show all config
 mails config set <key> <value>  # Set a value
 mails config get <key>          # Get a value
 ```
+
+### sync
+
+```bash
+mails sync                              # Sync emails from Worker to local storage
+mails sync --since 2026-03-01           # Sync from specific date
+mails sync --from-scratch               # Full re-sync
+```
+
+Pulls emails from your Worker (hosted or self-hosted) into local SQLite. Useful for offline access or local backup.
 
 ## SDK Usage
 
@@ -227,6 +241,8 @@ If `AUTH_TOKEN` is set, all `/api/*` endpoints require `Authorization: Bearer <t
 | `GET /api/inbox?to=<addr>&query=<text>` | Search emails |
 | `GET /api/code?to=<addr>&timeout=30` | Long-poll for verification code |
 | `GET /api/email?id=<id>` | Get email by ID (with attachments) |
+| `POST /api/send` | Send email via Resend (requires RESEND_API_KEY) |
+| `GET /api/sync?to=<addr>&since=<iso>` | Incremental email sync (with attachments) |
 | `GET /health` | Health check (always public) |
 
 ## Storage Providers
@@ -303,7 +319,9 @@ bun test:all          # All tests including live E2E
 | Download attachment       | ✅     | ✅    | —            | ✅              |
 | Save to disk (--save)     | ✅     | —     | —            | ✅              |
 | Mailbox isolation         | ✅     | ✅    | —            | —               |
-| Outbound recording        | ✅     | —     | N/A          | N/A             |
+| Outbound recording        | ✅     | —     | ✅           | N/A             |
+| Send via Worker (/api/send)| —     | —     | ✅           | —               |
+| Sync to local             | —      | —     | ✅           | —               |
 
 ## License
 

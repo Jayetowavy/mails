@@ -85,11 +85,15 @@ Resendキー不要 — ホスティングユーザーは月100通無料。無制
 ### セルフホストモード
 
 ```bash
-cd worker && wrangler deploy         # 独自Workerをデプロイ
+cd worker && wrangler deploy             # 独自Workerをデプロイ
+wrangler secret put RESEND_API_KEY       # WorkerにResendキーを設定（送信用）
+wrangler secret put AUTH_TOKEN           # 認証トークンを設定（オプション）
 mails config set worker_url https://your-worker.example.com
 mails config set worker_token YOUR_TOKEN
 mails config set mailbox agent@yourdomain.com
-mails inbox                          # Worker APIに問い合わせ
+mails send --to user@example.com --subject "Hello" --body "Hi"  # Worker経由で送信
+mails inbox                              # Worker APIに問い合わせ
+mails sync                               # メールをローカルSQLiteにダウンロード
 ```
 
 ## CLIリファレンス
@@ -152,6 +156,16 @@ mails config                    # 設定をすべて表示
 mails config set <key> <value>  # 値を設定
 mails config get <key>          # 値を取得
 ```
+
+### sync
+
+```bash
+mails sync                              # Workerからローカルストレージにメールを同期
+mails sync --since 2026-03-01           # 指定日からの同期
+mails sync --from-scratch               # フル再同期
+```
+
+Worker（ホスティングまたはセルフホスト）からローカルSQLiteにメールをプル。オフラインアクセスやローカルバックアップに便利。
 
 ## SDK
 
@@ -227,6 +241,8 @@ wrangler secret put AUTH_TOKEN    # シークレットトークンを設定
 | `GET /api/inbox?to=<addr>&query=<text>` | メール検索 |
 | `GET /api/code?to=<addr>&timeout=30` | 認証コードのロングポーリング |
 | `GET /api/email?id=<id>` | メール詳細（添付ファイル含む） |
+| `POST /api/send` | Resend経由でメール送信（RESEND_API_KEYが必要） |
+| `GET /api/sync?to=<addr>&since=<iso>` | 増分メール同期（添付ファイル含む） |
 | `GET /health` | ヘルスチェック（常に公開） |
 
 ## ストレージプロバイダー
@@ -303,7 +319,9 @@ bun test:all          # すべてのテスト（ライブE2E含む）
 | Download attachment       | ✅     | ✅    | —            | ✅              |
 | Save to disk (--save)     | ✅     | —     | —            | ✅              |
 | Mailbox isolation         | ✅     | ✅    | —            | —               |
-| Outbound recording        | ✅     | —     | N/A          | N/A             |
+| Outbound recording        | ✅     | —     | ✅           | N/A             |
+| Send via Worker (/api/send)| —     | —     | ✅           | —               |
+| Sync to local             | —      | —     | ✅           | —               |
 
 ## ライセンス
 
