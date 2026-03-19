@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test'
 import { send } from '../../src/core/send'
 import { saveConfig } from '../../src/core/config'
-import type { MailsConfig, Email } from '../../src/core/types'
+import type { MailsConfig } from '../../src/core/types'
 
 const BASE_CONFIG: MailsConfig = {
   mode: 'hosted',
@@ -149,110 +149,43 @@ describe('send', () => {
     ).rejects.toThrow('resend_api_key not configured')
   })
 
-  test('records outbound email in storage after successful send', async () => {
-    let savedEmail: Email | null = null
-    const saveEmailSpy = mock(async (email: Email) => { savedEmail = email })
+  test('uses OSS provider when worker_url is configured', async () => {
+    saveConfig({ ...BASE_CONFIG, resend_api_key: undefined, worker_url: 'https://my-worker.example.com', worker_token: 'tok123' })
 
-    mock.module('../../src/core/storage.js', () => ({
-      getStorage: async () => ({
-        name: 'sqlite',
-        init: async () => {},
-        saveEmail: saveEmailSpy,
-        getEmails: async () => [],
-        searchEmails: async () => [],
-        getEmail: async () => null,
-        getCode: async () => null,
-      }),
-    }))
+    let requestUrl = ''
+    let authHeader = ''
+    let requestBody: Record<string, unknown> = {}
 
-    globalThis.fetch = mock(async () => {
-      return new Response(JSON.stringify({ id: 'msg_stored' }))
+    globalThis.fetch = mock(async (url: string, init: RequestInit) => {
+      requestUrl = url
+      authHeader = (init.headers as Record<string, string>)['Authorization']
+      requestBody = JSON.parse(init.body as string)
+      return new Response(JSON.stringify({ id: 'oss_msg_1' }))
     }) as typeof fetch
 
-    saveConfig({ ...BASE_CONFIG })
+    const result = await send({ to: 'user@example.com', subject: 'OSS Test', text: 'hello from oss' })
 
-    const { send: freshSend } = await import(`../../src/core/send.ts?storage_test_1`)
-
-    const result = await freshSend({
-      to: 'user@example.com',
-      subject: 'Storage Test',
-      text: 'should be recorded',
-    })
-
-    expect(result.id).toBe('msg_stored')
-    expect(saveEmailSpy).toHaveBeenCalledTimes(1)
-    expect(savedEmail).not.toBeNull()
-    expect(savedEmail!.id).toBe('msg_stored')
-    expect(savedEmail!.direction).toBe('outbound')
-    expect(savedEmail!.status).toBe('sent')
-    expect(savedEmail!.subject).toBe('Storage Test')
-    expect(savedEmail!.to_address).toBe('user@example.com')
-    expect(savedEmail!.from_address).toBe('Bot <bot@test.com>')
-    expect(savedEmail!.body_text).toBe('should be recorded')
-    expect(savedEmail!.metadata).toEqual({ provider: 'resend' })
+    expect(result.id).toBe('oss_msg_1')
+    expect(result.provider).toBe('oss')
+    expect(requestUrl).toBe('https://my-worker.example.com/api/send')
+    expect(authHeader).toBe('Bearer tok123')
+    expect(requestBody.from).toBe('Bot <bot@test.com>')
+    expect(requestBody.to).toEqual(['user@example.com'])
+    expect(requestBody.subject).toBe('OSS Test')
+    expect(requestBody.text).toBe('hello from oss')
   })
 
-  test('skips storage recording for remote provider', async () => {
-    const saveEmailSpy = mock(async () => {})
+  test('worker_url takes priority over resend_api_key', async () => {
+    saveConfig({ ...BASE_CONFIG, resend_api_key: 're_should_not_use', worker_url: 'https://my-worker.example.com' })
 
-    mock.module('../../src/core/storage.js', () => ({
-      getStorage: async () => ({
-        name: 'remote',
-        init: async () => {},
-        saveEmail: saveEmailSpy,
-        getEmails: async () => [],
-        searchEmails: async () => [],
-        getEmail: async () => null,
-        getCode: async () => null,
-      }),
-    }))
-
-    globalThis.fetch = mock(async () => {
-      return new Response(JSON.stringify({ id: 'msg_remote' }))
+    let requestUrl = ''
+    globalThis.fetch = mock(async (url: string) => {
+      requestUrl = url
+      return new Response(JSON.stringify({ id: 'oss_priority' }))
     }) as typeof fetch
 
-    saveConfig({ ...BASE_CONFIG })
-
-    const { send: freshSend } = await import(`../../src/core/send.ts?storage_test_2`)
-
-    const result = await freshSend({
-      to: 'user@example.com',
-      subject: 'Remote Test',
-      text: 'should not be recorded locally',
-    })
-
-    expect(result.id).toBe('msg_remote')
-    expect(saveEmailSpy).not.toHaveBeenCalled()
-  })
-
-  test('send succeeds even if storage write fails', async () => {
-    mock.module('../../src/core/storage.js', () => ({
-      getStorage: async () => ({
-        name: 'sqlite',
-        init: async () => {},
-        saveEmail: async () => { throw new Error('DB write failed') },
-        getEmails: async () => [],
-        searchEmails: async () => [],
-        getEmail: async () => null,
-        getCode: async () => null,
-      }),
-    }))
-
-    globalThis.fetch = mock(async () => {
-      return new Response(JSON.stringify({ id: 'msg_resilient' }))
-    }) as typeof fetch
-
-    saveConfig({ ...BASE_CONFIG })
-
-    const { send: freshSend } = await import(`../../src/core/send.ts?storage_test_3`)
-
-    const result = await freshSend({
-      to: 'user@example.com',
-      subject: 'Resilient Test',
-      text: 'should still succeed',
-    })
-
-    expect(result.id).toBe('msg_resilient')
-    expect(result.provider).toBe('resend')
+    const result = await send({ to: 'user@example.com', subject: 'Priority', text: 'test' })
+    expect(requestUrl).toContain('/api/send')
+    expect(result.provider).toBe('oss')
   })
 })

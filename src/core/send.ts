@@ -2,19 +2,24 @@ import type { SendOptions, SendProvider, SendResult } from './types.js'
 import { loadConfig, resolveApiKey } from './config.js'
 import { createResendProvider } from '../providers/send/resend.js'
 import { createHostedSendProvider } from '../providers/send/hosted.js'
+import { createOSSSendProvider } from '../providers/send/oss.js'
 import { prepareSendAttachments } from './send-attachments.js'
-import { getStorage } from './storage.js'
 
 function resolveProvider(): SendProvider {
   const config = loadConfig()
 
   // Priority:
   // 1. api_key (hosted mode) → cloud send via /v1/send (100 free/month + x402)
-  // 2. resend_api_key → direct Resend (unlimited, self-managed)
-  // 3. Nothing configured → error
+  // 2. worker_url → OSS worker /api/send
+  // 3. resend_api_key → direct Resend (unlimited, self-managed)
+  // 4. Nothing configured → error
 
   if (config.api_key) {
     return createHostedSendProvider(config.api_key)
+  }
+
+  if (config.worker_url) {
+    return createOSSSendProvider(config.worker_url, config.worker_token)
   }
 
   if (config.resend_api_key) {
@@ -25,7 +30,7 @@ function resolveProvider(): SendProvider {
     throw new Error('resend_api_key not configured. Run: mails config set resend_api_key <key>')
   }
 
-  throw new Error('No send provider configured. Run: mails claim <name> or mails config set resend_api_key <key>')
+  throw new Error('No send provider configured. Run: mails claim <name> or configure worker_url/resend_api_key')
 }
 
 export async function send(options: SendOptions): Promise<SendResult> {
@@ -51,42 +56,5 @@ export async function send(options: SendOptions): Promise<SendResult> {
 
   const attachments = await prepareSendAttachments(options.attachments)
 
-  const result = await provider.send({
-    from,
-    to,
-    subject: options.subject,
-    text: options.text,
-    html: options.html,
-    replyTo: options.replyTo,
-    headers: options.headers,
-    attachments,
-  })
-
-  // Record outbound email in local storage (best-effort, skip for remote)
-  try {
-    const storage = await getStorage()
-    if (storage.name !== 'remote') {
-      await storage.saveEmail({
-        id: result.id,
-        mailbox: from,
-        from_address: from,
-        from_name: '',
-        to_address: to.join(', '),
-        subject: options.subject,
-        body_text: options.text ?? '',
-        body_html: options.html ?? '',
-        code: null,
-        headers: options.headers ?? {},
-        metadata: { provider: result.provider },
-        direction: 'outbound',
-        status: 'sent',
-        received_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      })
-    }
-  } catch {
-    // Best-effort: don't fail the send if storage write fails
-  }
-
-  return result
+  return provider.send({ from, to, subject: options.subject, text: options.text, html: options.html, replyTo: options.replyTo, headers: options.headers, attachments })
 }
