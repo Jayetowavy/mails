@@ -26,7 +26,9 @@ export interface Attachment {
   filename: string
   content_type: string
   size_bytes: number | null
+  size?: number | null          // mails.dev compat alias
   content_disposition: string | null
+  disposition?: string | null   // mails.dev compat alias
   content_id: string | null
   mime_part_index: number
   text_content: string

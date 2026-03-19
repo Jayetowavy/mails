@@ -345,4 +345,49 @@ describe('CLI: inbox command', () => {
     expect(text).toContain('notes.txt')
     expect(text).toContain('text/plain')
   })
+
+  test('detail view handles mails.dev attachment format (size field)', async () => {
+    const email = makeEmail({
+      id: 'compat-att-123',
+      subject: 'Compat test',
+      attachments: [
+        {
+          id: 'a1',
+          email_id: 'compat-att-123',
+          filename: 'doc.pdf',
+          content_type: 'application/pdf',
+          size_bytes: null,
+          size: 5000,
+          content_disposition: null,
+          disposition: 'attachment',
+          content_id: null,
+          mime_part_index: 0,
+          text_content: '',
+          text_extraction_status: 'unsupported' as const,
+          storage_key: null,
+          created_at: '2026-03-20T00:00:00Z',
+        },
+      ],
+    })
+    const output: string[] = []
+
+    mock.module('../../src/core/receive.js', () => ({
+      getInbox: mock(async () => []),
+      searchInbox: mock(async () => []),
+      getEmail: mock(async () => email),
+      downloadAttachment: mock(async () => null),
+    }))
+
+    console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
+    console.error = () => {}
+    process.exit = ((code?: number) => { throw new Error(`exit:${code ?? 0}`) }) as typeof process.exit
+
+    const { inboxCommand } = await importInboxCommand()
+    await inboxCommand(['compat-att-123'])
+
+    const text = output.join('\n')
+    expect(text).toContain('Attachments:')
+    expect(text).toContain('doc.pdf')
+    expect(text).toContain('5000 bytes')
+  })
 })

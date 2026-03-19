@@ -42,7 +42,7 @@ export async function inboxCommand(args: string[]) {
     if (email.attachments?.length) {
       console.log('Attachments:')
       for (const attachment of email.attachments) {
-        const size = attachment.size_bytes ?? (attachment as unknown as Record<string, unknown>).size ?? 0
+        const size = attachment.size_bytes ?? attachment.size ?? 0
         console.log(`  ${attachment.id}  ${attachment.filename} (${attachment.content_type}, ${size} bytes)`)
       }
     }
