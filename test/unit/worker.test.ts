@@ -271,3 +271,186 @@ describe('worker: POST /api/send', () => {
     expect(json.error).toBe('Method not allowed')
   })
 })
+
+// --- GET /api/sync tests ---
+
+function makeSyncEmail(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'sync-e1',
+    mailbox: 'user@test.com',
+    from_address: 'sender@test.com',
+    from_name: 'Sender',
+    to_address: 'user@test.com',
+    subject: 'Test email',
+    body_text: 'Hello world',
+    body_html: '<p>Hello world</p>',
+    code: '123456',
+    headers: '{"x-test":"1"}',
+    metadata: '{"source":"test"}',
+    message_id: '<msg-1@test.com>',
+    has_attachments: 0,
+    attachment_count: 0,
+    attachment_names: '',
+    attachment_search_text: '',
+    raw_storage_key: null,
+    direction: 'inbound',
+    status: 'received',
+    received_at: '2026-03-19T10:00:00Z',
+    created_at: '2026-03-19T10:00:00Z',
+    ...overrides,
+  }
+}
+
+function makeSyncAttachment(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'att-1',
+    email_id: 'sync-e1',
+    filename: 'report.txt',
+    content_type: 'text/plain',
+    size_bytes: 42,
+    content_disposition: 'attachment',
+    content_id: null,
+    mime_part_index: 0,
+    text_content: 'report content',
+    text_extraction_status: 'done',
+    storage_key: 's3://bucket/key',
+    created_at: '2026-03-19T10:00:00Z',
+    ...overrides,
+  }
+}
+
+function createSyncMockD1(options: {
+  total?: number
+  emailRows?: Record<string, unknown>[]
+  attachmentRows?: Record<string, unknown>[][]
+} = {}) {
+  const { total = 1, emailRows, attachmentRows } = options
+  const defaultEmails = emailRows ?? [makeSyncEmail()]
+  const defaultAttachments = attachmentRows ?? defaultEmails.map(() => [])
+
+  let callIndex = 0
+  const prepareMock = mock((_sql: string) => {
+    const currentCall = callIndex++
+    return {
+      bind: mock((..._args: unknown[]) => ({
+        first: mock(() => {
+          // First call is the COUNT query
+          return Promise.resolve({ total })
+        }),
+        all: mock(() => {
+          if (currentCall === 1) {
+            // Second call: SELECT * FROM emails
+            return Promise.resolve({ results: defaultEmails })
+          }
+          // Subsequent calls: SELECT * FROM attachments for each email
+          const attachmentIndex = currentCall - 2
+          return Promise.resolve({ results: defaultAttachments[attachmentIndex] ?? [] })
+        }),
+      })),
+    }
+  })
+
+  return { db: { prepare: prepareMock } as unknown as D1Database, prepareMock }
+}
+
+describe('worker: GET /api/sync', () => {
+  test('returns emails since timestamp', async () => {
+    const email1 = makeSyncEmail({ id: 'e1', received_at: '2026-03-19T10:00:00Z' })
+    const email2 = makeSyncEmail({ id: 'e2', received_at: '2026-03-19T11:00:00Z', subject: 'Second' })
+
+    const { db } = createSyncMockD1({
+      total: 2,
+      emailRows: [email1, email2],
+      attachmentRows: [[], []],
+    })
+    const env: Env = { DB: db }
+
+    const request = new Request('http://localhost/api/sync?to=user@test.com&since=2026-03-19T00:00:00Z')
+    const response = await worker.fetch(request, env)
+    const json = await response.json() as { emails: any[]; total: number; has_more: boolean }
+
+    expect(response.status).toBe(200)
+    expect(json.total).toBe(2)
+    expect(json.emails).toHaveLength(2)
+    expect(json.has_more).toBe(false)
+    // headers/metadata should be parsed from JSON strings
+    expect(json.emails[0].headers).toEqual({ 'x-test': '1' })
+    expect(json.emails[0].metadata).toEqual({ source: 'test' })
+    expect(json.emails[0].has_attachments).toBe(false)
+  })
+
+  test('returns 400 without ?to=', async () => {
+    const { db } = createSyncMockD1()
+    const env: Env = { DB: db }
+
+    const request = new Request('http://localhost/api/sync')
+    const response = await worker.fetch(request, env)
+    const json = await response.json() as { error: string }
+
+    expect(response.status).toBe(400)
+    expect(json.error).toContain('Missing ?to=')
+  })
+
+  test('returns attachments with emails', async () => {
+    const email = makeSyncEmail({ has_attachments: 1, attachment_count: 1 })
+    const attachment = makeSyncAttachment()
+
+    const { db } = createSyncMockD1({
+      total: 1,
+      emailRows: [email],
+      attachmentRows: [[attachment]],
+    })
+    const env: Env = { DB: db }
+
+    const request = new Request('http://localhost/api/sync?to=user@test.com')
+    const response = await worker.fetch(request, env)
+    const json = await response.json() as { emails: any[] }
+
+    expect(response.status).toBe(200)
+    expect(json.emails).toHaveLength(1)
+    expect(json.emails[0].has_attachments).toBe(true)
+    expect(json.emails[0].attachment_count).toBe(1)
+    expect(json.emails[0].attachments).toHaveLength(1)
+    expect(json.emails[0].attachments[0].filename).toBe('report.txt')
+    expect(json.emails[0].attachments[0].downloadable).toBe(true)
+  })
+
+  test('supports pagination', async () => {
+    const email = makeSyncEmail()
+
+    const { db } = createSyncMockD1({
+      total: 150,
+      emailRows: [email],
+      attachmentRows: [[]],
+    })
+    const env: Env = { DB: db }
+
+    const request = new Request('http://localhost/api/sync?to=user@test.com&limit=50&offset=0')
+    const response = await worker.fetch(request, env)
+    const json = await response.json() as { emails: any[]; total: number; has_more: boolean }
+
+    expect(response.status).toBe(200)
+    expect(json.total).toBe(150)
+    expect(json.has_more).toBe(true)
+  })
+
+  test('requires auth when AUTH_TOKEN set', async () => {
+    const { db } = createSyncMockD1()
+    const env: Env = { DB: db, AUTH_TOKEN: 'secret123' }
+
+    // No auth header
+    const request = new Request('http://localhost/api/sync?to=user@test.com')
+    const response = await worker.fetch(request, env)
+    const json = await response.json() as { error: string }
+
+    expect(response.status).toBe(401)
+    expect(json.error).toBe('Unauthorized')
+
+    // With correct auth header
+    const request2 = new Request('http://localhost/api/sync?to=user@test.com', {
+      headers: { Authorization: 'Bearer secret123' },
+    })
+    const response2 = await worker.fetch(request2, env)
+    expect(response2.status).toBe(200)
+  })
+})
