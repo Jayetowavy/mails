@@ -124,4 +124,34 @@ describe.skipIf(skip)('Full E2E: self-hosted OSS worker', () => {
     expect(detail!.body_text).toContain(VERIFICATION_CODE)
     console.log(`  Detail: ${detail!.id} — ${detail!.subject}`)
   })
+
+  test('7. getEmails with direction filter', async () => {
+    const provider = createRemoteProvider({
+      url: OSS_WORKER_URL,
+      mailbox: OSS_MAILBOX,
+      token: OSS_WORKER_TOKEN || undefined,
+    })
+
+    const inbound = await provider.getEmails(OSS_MAILBOX, { direction: 'inbound' })
+    expect(inbound.length).toBeGreaterThanOrEqual(1)
+    expect(inbound.every(e => e.direction === 'inbound')).toBe(true)
+    console.log(`  Direction filter: inbound=${inbound.length}`)
+  })
+
+  test('8. getEmails with pagination', async () => {
+    const provider = createRemoteProvider({
+      url: OSS_WORKER_URL,
+      mailbox: OSS_MAILBOX,
+      token: OSS_WORKER_TOKEN || undefined,
+    })
+
+    const page1 = await provider.getEmails(OSS_MAILBOX, { limit: 1 })
+    expect(page1).toHaveLength(1)
+
+    const page2 = await provider.getEmails(OSS_MAILBOX, { limit: 1, offset: 1 })
+    if (page2.length > 0) {
+      expect(page2[0]!.id).not.toBe(page1[0]!.id)
+    }
+    console.log(`  Pagination: page1=${page1.length}, page2=${page2.length}`)
+  })
 })
