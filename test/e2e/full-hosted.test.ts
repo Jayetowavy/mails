@@ -149,4 +149,36 @@ describe.skipIf(skip)('Full E2E: hosted cloud mode', () => {
     expect(result.id).toBeTruthy()
     expect(result.provider).toBe('mails.dev')
   })
+
+  test('7. getEmails with direction filter', async () => {
+    const provider = createRemoteProvider({
+      url: WORKER_URL,
+      mailbox: TEST_MAILBOX,
+      apiKey: TEST_API_KEY,
+      token: TEST_API_KEY,
+    })
+
+    const inbound = await provider.getEmails(TEST_MAILBOX, { direction: 'inbound' })
+    expect(inbound.length).toBeGreaterThanOrEqual(1)
+    expect(inbound.every(e => e.direction === 'inbound')).toBe(true)
+    console.log(`  Direction filter: inbound=${inbound.length}`)
+  })
+
+  test('8. getEmails with pagination', async () => {
+    const provider = createRemoteProvider({
+      url: WORKER_URL,
+      mailbox: TEST_MAILBOX,
+      apiKey: TEST_API_KEY,
+      token: TEST_API_KEY,
+    })
+
+    const page1 = await provider.getEmails(TEST_MAILBOX, { limit: 1 })
+    expect(page1).toHaveLength(1)
+
+    const page2 = await provider.getEmails(TEST_MAILBOX, { limit: 1, offset: 1 })
+    if (page2.length > 0) {
+      expect(page2[0]!.id).not.toBe(page1[0]!.id)
+    }
+    console.log(`  Pagination: page1=${page1.length}, page2=${page2.length}`)
+  })
 })
