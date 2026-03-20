@@ -28,10 +28,18 @@ export async function inboxCommand(args: string[]) {
 
   // mails inbox <id> — show single email
   if (opts._positional) {
-    const email = await getEmail(opts._positional)
+    let email
+    try {
+      email = await getEmail(opts._positional)
+    } catch (err) {
+      console.error((err as Error).message)
+      process.exit(1)
+      return
+    }
     if (!email) {
       console.error(`Email not found: ${opts._positional}`)
       process.exit(1)
+      return
     }
     console.log(`From: ${email.from_name ? `${email.from_name} <${email.from_address}>` : email.from_address}`)
     console.log(`To: ${email.to_address}`)
@@ -94,10 +102,13 @@ export async function inboxCommand(args: string[]) {
     return
   }
 
+  const showFullId = opts['full-id'] !== undefined
+
   for (const email of emails) {
     const code = email.code ? ` [${email.code}]` : ''
     const clip = email.attachment_count ? ` +${email.attachment_count}att` : ''
     const from = email.from_name || email.from_address
-    console.log(`${email.id.slice(0, 8)}  ${email.received_at.slice(0, 16)}  ${from.padEnd(24).slice(0, 24)}  ${email.subject.slice(0, 40)}${code}${clip}`)
+    const displayId = showFullId ? email.id : email.id.slice(0, 8)
+    console.log(`${displayId}  ${email.received_at.slice(0, 16)}  ${from.padEnd(24).slice(0, 24)}  ${email.subject.slice(0, 40)}${code}${clip}`)
   }
 }
