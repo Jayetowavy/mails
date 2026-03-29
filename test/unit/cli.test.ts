@@ -213,9 +213,16 @@ describe('CLI: inbox command', () => {
       searchInbox: searchInboxSpy,
       getEmail: getEmailSpy,
       downloadAttachment: mock(async () => null),
+      waitForCode: mock(async () => null),
     }))
     mock.module('../../src/core/config.js', () => ({
       loadConfig: () => ({ mailbox: 'agent@test.com', send_provider: 'resend', storage_provider: 'sqlite' }),
+      saveConfig: mock(() => {}),
+      getConfigValue: mock(() => undefined),
+      setConfigValue: mock(() => {}),
+      resolveApiKey: mock(async () => null),
+      CONFIG_DIR: '/tmp/.mails',
+      CONFIG_FILE: '/tmp/.mails/config.json',
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -245,9 +252,16 @@ describe('CLI: inbox command', () => {
       searchInbox: searchInboxSpy,
       getEmail: mock(async () => null),
       downloadAttachment: mock(async () => null),
+      waitForCode: mock(async () => null),
     }))
     mock.module('../../src/core/config.js', () => ({
       loadConfig: () => ({ mailbox: 'agent@test.com', send_provider: 'resend', storage_provider: 'sqlite' }),
+      saveConfig: mock(() => {}),
+      getConfigValue: mock(() => undefined),
+      setConfigValue: mock(() => {}),
+      resolveApiKey: mock(async () => null),
+      CONFIG_DIR: '/tmp/.mails',
+      CONFIG_FILE: '/tmp/.mails/config.json',
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -282,9 +296,16 @@ describe('CLI: inbox command', () => {
       searchInbox: mock(async () => []),
       getEmail: mock(async () => null),
       downloadAttachment: mock(async () => null),
+      waitForCode: mock(async () => null),
     }))
     mock.module('../../src/core/config.js', () => ({
       loadConfig: () => ({ mailbox: 'agent@test.com', send_provider: 'resend', storage_provider: 'sqlite' }),
+      saveConfig: mock(() => {}),
+      getConfigValue: mock(() => undefined),
+      setConfigValue: mock(() => {}),
+      resolveApiKey: mock(async () => null),
+      CONFIG_DIR: '/tmp/.mails',
+      CONFIG_FILE: '/tmp/.mails/config.json',
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -309,9 +330,16 @@ describe('CLI: inbox command', () => {
       searchInbox: mock(async () => []),
       getEmail: mock(async () => null),
       downloadAttachment: mock(async () => null),
+      waitForCode: mock(async () => null),
     }))
     mock.module('../../src/core/config.js', () => ({
       loadConfig: () => ({ mailbox: 'agent@test.com', send_provider: 'resend', storage_provider: 'sqlite' }),
+      saveConfig: mock(() => {}),
+      getConfigValue: mock(() => undefined),
+      setConfigValue: mock(() => {}),
+      resolveApiKey: mock(async () => null),
+      CONFIG_DIR: '/tmp/.mails',
+      CONFIG_FILE: '/tmp/.mails/config.json',
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -336,9 +364,16 @@ describe('CLI: inbox command', () => {
       searchInbox: mock(async () => []),
       getEmail: mock(async () => null),
       downloadAttachment: mock(async () => null),
+      waitForCode: mock(async () => null),
     }))
     mock.module('../../src/core/config.js', () => ({
       loadConfig: () => ({ mailbox: 'agent@test.com', send_provider: 'resend', storage_provider: 'sqlite' }),
+      saveConfig: mock(() => {}),
+      getConfigValue: mock(() => undefined),
+      setConfigValue: mock(() => {}),
+      resolveApiKey: mock(async () => null),
+      CONFIG_DIR: '/tmp/.mails',
+      CONFIG_FILE: '/tmp/.mails/config.json',
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -396,6 +431,7 @@ describe('CLI: inbox command', () => {
       searchInbox: mock(async () => []),
       getEmail: mock(async () => email),
       downloadAttachment: mock(async () => null),
+      waitForCode: mock(async () => null),
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -444,6 +480,7 @@ describe('CLI: inbox command', () => {
       searchInbox: mock(async () => []),
       getEmail: mock(async () => email),
       downloadAttachment: mock(async () => null),
+      waitForCode: mock(async () => null),
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
@@ -493,6 +530,7 @@ describe('CLI: inbox command', () => {
         contentType: 'text/plain',
         data: new TextEncoder().encode('safe').buffer,
       })),
+      waitForCode: mock(async () => null),
     }))
 
     console.log = (msg?: unknown) => { output.push(String(msg ?? '')) }
